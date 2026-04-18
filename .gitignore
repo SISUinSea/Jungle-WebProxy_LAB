@@ -1,3 +1,11 @@
+# Project binary targets
+# Git cannot ignore files by executable bit alone, so list concrete build outputs.
+webproxy-lab/proxy
+webproxy-lab/tiny/tiny
+webproxy-lab/tiny/cgi-bin/adder
+webproxy-lab/echo/echoclient
+webproxy-lab/echo/echoserveri
+
 # MacOS
 .DS_Store
 .AppleDouble
