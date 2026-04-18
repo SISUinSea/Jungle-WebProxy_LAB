@@ -74,6 +74,7 @@ void doit(int fd)
   
   /* parse_uri로 uri를 넘겨주고 filename, cgiargs를 파싱하기. 결과는 static 여부를 반환*/
   is_static = parse_uri(uri, filename, cgiargs);
+  printf("uri: %s, filename: %s, cgiargs: %s\n\n", uri, filename, cgiargs);
   /* 존재하지 않는 파일인 경우 404 에러 반환 후 종료 */
   if (stat(filename, &sbuf) < 0) {
     clienterror(fd, filename, "404", "Not found", "Tiny couldn't find this file");
@@ -113,8 +114,28 @@ void read_requesthdrs(rio_t *rp) {
 }
 
 int parse_uri(char *uri, char *filename, char *cgiargs) {
+  char *ptr;
 
+  if (strstr(uri, "cgi-bin") == NULL) {
+    strcpy(cgiargs, "");
+    strcpy(filename, ".");
+    strcat(filename, uri);
+    if (strlen(uri) == 1 && uri[strlen(uri) - 1] == '/') {
+      strcat(filename, "home.html");
+    }
     return 1;
+  } else {
+    ptr = index(uri, '?');
+    if (ptr) {
+      strcpy(cgiargs, ptr+1);
+      *ptr = '\0';
+    } else {
+      strcpy(cgiargs, "");
+    }
+    strcpy(filename, ".");
+    strcat(filename, uri);
+    return 0;
+  }
 }
 
 void serve_static(int fd, char *filename, int filesize) {
