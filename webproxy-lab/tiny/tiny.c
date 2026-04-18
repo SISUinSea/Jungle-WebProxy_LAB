@@ -139,9 +139,43 @@ int parse_uri(char *uri, char *filename, char *cgiargs) {
 }
 
 void serve_static(int fd, char *filename, int filesize) {
+  int srcfd;
+  char *srcp, filetype[MAXLINE], buf[MAXBUF];
+
+  buf[0] = '\0';
+
+  /* Send response headers to client*/
+  get_filetype(filename, filetype);
+  printf("filetype: %s\n", filetype);
+  sprintf(buf, "HTTP/1.0 200 OK\r\n");
+  sprintf(buf + strlen(buf), "Server: Tiny Web Server\r\n");
+  sprintf(buf + strlen(buf), "Connection: close\r\n");
+  sprintf(buf + strlen(buf), "Content-length: %d\r\n", filesize);
+  sprintf(buf + strlen(buf), "Content-type: %s\r\n\r\n", filetype);
+  Rio_writen(fd, buf, strlen(buf));
+  printf("Response headers:\n");
+  printf("%s", buf);
+
+  /* Send response body to client */
+  srcfd = Open(filename, O_RDONLY, 0);
+  srcp = Mmap(0, filesize, PROT_READ, MAP_PRIVATE, srcfd, 0);
+  Close(srcfd);
+  Rio_writen(fd, srcp, filesize);
+  Munmap(srcp, filesize);
 }
 
 void get_filetype(char *filename, char *filetype) {
+  if (strstr(filename, ".html")) {
+    strcpy(filetype, "text/html");
+  } else if (strstr(filename, ".gif")) {
+    strcpy(filetype, "image/gif");
+  } else if (strstr(filename, ".png")) {
+    strcpy(filetype, "image/png");
+  } else if (strstr(filename, ".jpg")) {
+    strcpy(filetype, "image/jpeg");
+  } else {
+    strcpy(filetype, "text/plain");
+  }
 }
 
 void serve_dynamic(int fd, char *filename, char *cgiargs) {
