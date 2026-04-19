@@ -173,12 +173,32 @@ void get_filetype(char *filename, char *filetype) {
     strcpy(filetype, "image/png");
   } else if (strstr(filename, ".jpg")) {
     strcpy(filetype, "image/jpeg");
+  } else if (strstr(filename, ".mp4")) {
+    strcpy(filetype, "video/mp4");
+  } else if (strstr(filename, ".mpg") || strstr(filename, ".mpeg")) {
+    strcpy(filetype, "video/mpeg");
   } else {
     strcpy(filetype, "text/plain");
   }
 }
 
 void serve_dynamic(int fd, char *filename, char *cgiargs) {
+  char buf[MAXLINE], *emptylist[] = { NULL };
+
+  /* Return first part of HTTP Response */
+  sprintf(buf, "HTTP/1.0 200 OK\r\n");
+  Rio_writen(fd, buf, strlen(buf));
+  sprintf(buf, "Server: Tiny Web Server\r\n");
+  Rio_writen(fd, buf, strlen(buf));
+
+  if (fork() == 0) {
+    setenv("QUERY_STRING", cgiargs, 1);
+    dup2(fd, STDOUT_FILENO);
+    execve(filename, emptylist, environ);
+    perror("execve");
+    _exit(1);
+  }
+  wait(NULL);
 }
 
 void clienterror(int fd, char *cause, char *errnum, char *shortmsg, char *longmsg) {
