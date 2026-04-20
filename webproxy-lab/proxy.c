@@ -15,6 +15,8 @@ void doit(int fd);
 void read_requesthdrs(rio_t *rp);
 
 int parse_uri(char* request, char* host, char* port, char *path_and_query);
+int send_request_to_server(int fd, char* method, char* path_and_query, char* http_version);
+int send_response_to_client(int fd, int clientfd);
 
 
 
@@ -49,7 +51,7 @@ int main(int argc, char **argv)
 
 void doit(int fd)
 {
-  int is_static; /* 정적 파일 요청 여부 판단 */
+  int clientfd; 
   struct stat sbuf; /* 이건 아마 파일의 상태를 확인한 값을 넘겨받기 위한 거*/
   char buf[MAXLINE], method[MAXLINE], request[MAXLINE], version[MAXLINE];
   char host[MAXLINE], port[MAXLINE], path_and_query[MAXLINE];
@@ -74,10 +76,14 @@ void doit(int fd)
   read_requesthdrs(&rio);
   
   /* parse_uri로 uri를 넘겨주고 filename, cgiargs를 파싱하기. 결과는 static 여부를 반환*/
-  is_static = parse_uri(request, host, port, path_and_query);
+  parse_uri(request, host, port, path_and_query);
   printf("host: %s, port: %s, path_and_query: %s\n\n", host, port, path_and_query);
 
+  clientfd = Open_clientfd(host, port);
   
+  /* 서버에 요청 보내기 */
+  send_request_to_server(clientfd, method, path_and_query, version);
+  send_response_to_client(fd, clientfd);
 }
 
 void read_requesthdrs(rio_t *rp) {
@@ -144,6 +150,43 @@ int parse_uri(char *request, char *host, char *port, char* path_and_query) {
     strcpy(path_and_query, slash);
   }
 
+  return 0;
+}
+
+
+int send_request_to_server(int fd, char* method, char* path_and_query, char* http_version)
+{
+  char buf[MAXLINE];
+  sprintf(buf, "%s %s %s\r\n", method, path_and_query, http_version);
+  printf("buf: %s", buf);
+  Rio_writen(fd, buf, strlen(buf));
+  
+  sprintf(buf, "%s\r\n\r\n", user_agent_hdr);
+  Rio_writen(fd, buf, strlen(buf));
+  printf("SEND TO SERVER: %s", buf);
+
+  return 0;
+}
+
+
+int send_response_to_client(int fd, int clientfd){
+  rio_t rio;
+  int readn;
+
+  char buf[MAXLINE];
+
+  rio_readinitb(&rio, clientfd);
+  
+  while (1) {
+    readn = rio_readnb(&rio, buf, MAXLINE);
+    rio_writen(fd, buf, readn);
+    printf("%s", buf);
+    if (readn == 0){
+      break;
+    }
+    
+  }
+  
   return 0;
 }
 
