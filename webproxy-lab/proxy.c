@@ -101,6 +101,7 @@ void read_requesthdrs(rio_t *rp) {
 int parse_uri(char *request, char *host, char *port, char* path_and_query) {
   int index;
   char *ptr = request, *temp;
+  char *colon = NULL, *slash = NULL;
 
   /*
     request는 다음과 같은 형태를 띔.
@@ -114,7 +115,8 @@ int parse_uri(char *request, char *host, char *port, char* path_and_query) {
       path_and_query-> "/filname.type?argument=1&argument2=2"(아무런 값도 주어지지 않은 경우에는 "/"이어야 함.)
   */
 
-  snprintf(path_and_query, 2, "/");
+  strcpy(path_and_query, "/");
+  strcpy(port, "80");
 
   /* http:// 가 없다면 fail */
   if (strncmp(ptr, "http://", 7) != 0) {
@@ -124,23 +126,23 @@ int parse_uri(char *request, char *host, char *port, char* path_and_query) {
   /* http:// 건너뛰기 */
   ptr += 7;
 
-  /* :로 port와 host를 구분 */
-  if ((temp=strchr(ptr, ':')) == NULL) {
-    snprintf(port, 2 + 1, "80");
-    temp = strrchr(ptr, '/');
-  }
-  
-  snprintf(host, temp - ptr + 1, ptr);
-  ptr += strlen(host) + 1; /* port 로 가기 */ 
+  colon = strchr(ptr, ':');
+  slash = strchr(ptr, '/');
 
-  /* path_and_query가 있다면 넣기. 없다면 "/"으로 설정 */
-  if ((temp=strchr(ptr, '/')) == NULL) {
-    snprintf(port, strlen(ptr), ptr);
-    return 0;
+  /* domain */
+  if (colon == NULL && slash == NULL) {
+    strcpy(host, ptr);
+  } else if (colon == NULL && slash != NULL) { /* domain + /uri */
+    strncpy(host, ptr, slash - ptr);
+    strcpy(path_and_query, slash);
+  } else if (colon != NULL && slash == NULL) { /* domain:1234 */
+    strncpy(host, ptr, colon - ptr);
+    strcpy(port, colon + 1);
+  } else { /* domain:1234/uri */
+    strncpy(host, ptr, colon - ptr);
+    strncpy(port, colon + 1, slash - (colon + 1));
+    strcpy(path_and_query, slash);
   }
-
-  snprintf(port, (temp - ptr + 1), ptr);
-  snprintf(path_and_query, strlen(temp) + 1, temp);
 
   return 0;
 }
