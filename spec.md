@@ -1,5 +1,13 @@
 # 학습 과제 (금 ~ 화요일)
 
+## 1. 학습 목표
+- Assembly 언어와 매우 가까운 C언어를 사용하여 좀 더 컴퓨터의 본질에 가까이 가 봅시다. 
+
+- 언어로 웹서버와 Proxy를 직접 만들어 봅니다. 
+
+## 2. 학습 키워드
+- BSD소켓, IP, TCP, HTTP, file descriptor, DNS
+
 ## Web/Proxy Server
 
 ## 실습 진행 환경 안내
