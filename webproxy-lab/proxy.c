@@ -43,7 +43,7 @@ int main(int argc, char **argv)
     clientlen = sizeof(clientaddr);
     connfd = accept(listenfd, (SA *)&clientaddr, &clientlen); // line:netp:tiny:accept
 
-    if (connfd < 3) {
+    if (connfd < 0) {
       printf("Accept fail\n");
       continue;
     }
@@ -94,7 +94,7 @@ void doit(int fd)
 
   clientfd = open_clientfd(host, port);
 
-  if (clientfd < 3) {
+  if (clientfd < 0) {
     clienterror(fd, method, "500", "Server error", "Cannot connect with requested server.");
     return;
   }
