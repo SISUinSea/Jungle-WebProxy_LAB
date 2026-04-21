@@ -15,7 +15,7 @@ void doit(int fd);
 void read_requesthdrs(rio_t *rp);
 
 int parse_uri(char* request, char* host, char* port, char *path_and_query);
-int send_request_to_server(int fd, char* method, char* path_and_query, char* http_version, char* host, rio_t* rp);
+int send_request_to_server(int fd, char* method, char* path_and_query, char* http_version, char* host, char* port, rio_t* rp);
 int send_response_to_client(int fd, int clientfd);
 void clienterror(int fd, char *cause, char *errnum, char *shortmsg,
   char *longmsg);
@@ -48,11 +48,14 @@ int main(int argc, char **argv)
       continue;
     }
 
-    getnameinfo((SA *)&clientaddr, clientlen, hostname, MAXLINE, port, MAXLINE,
-                0);
+    if(getnameinfo((SA *)&clientaddr, clientlen, hostname, MAXLINE, port, MAXLINE, 0) != 0) {
+      close(connfd);
+      printf("getnameinfo fail\n");
+      continue;
+    }
     printf("Accepted connection from (%s, %s)\n", hostname, port);
     doit(connfd);  // line:netp:tiny:doit
-    Close(connfd); // line:netp:tiny:close
+    close(connfd); // line:netp:tiny:close
   }
 }
 
@@ -100,7 +103,7 @@ void doit(int fd)
   }
   
   /* 서버에 요청 보내기 */
-  send_request_to_server(clientfd, method, path_and_query, version, host, &rio);
+  send_request_to_server(clientfd, method, path_and_query, version, host, port, &rio);
   send_response_to_client(fd, clientfd);
 
   Close(clientfd);
@@ -179,7 +182,7 @@ int parse_uri(char *request, char *host, char *port, char* path_and_query) {
 }
 
 
-int send_request_to_server(int fd, char* method, char* path_and_query, char* http_version, char* host, rio_t* rp)
+int send_request_to_server(int fd, char* method, char* path_and_query, char* http_version, char* host, char* port, rio_t* rp)
 {
   char buf[MAXLINE];
   int has_host_hdr = 0;
@@ -214,7 +217,7 @@ int send_request_to_server(int fd, char* method, char* path_and_query, char* htt
   }
 
   if (has_host_hdr == 0) {
-    sprintf(buf, "Host: %s\r\n", host);
+    sprintf(buf, "Host: %s:%s\r\n", host, port);
     printf("buf: %s", buf);
     Rio_writen(fd, buf, strlen(buf));
   }
