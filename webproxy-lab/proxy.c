@@ -73,14 +73,18 @@ void doit(int fd)
   sscanf(buf, "%s %s %s", method, request, version);
   strcpy(version, "HTTP/1.0");
   if (strcasecmp(method, "GET") != 0 && strcasecmp(method, "HEAD") != 0) {
-    clienterror(fd, method, "501", "Not implemented", "Tiny does not implement this method");
+    clienterror(fd, method, "501", "Not implemented", "Proxy does not implement this method");
 
     return;
   }
   // read_requesthdrs(&rio);
   
   /* parse_uri로 uri를 넘겨주고 filename, cgiargs를 파싱하기. 결과는 static 여부를 반환*/
-  parse_uri(request, host, port, path_and_query);
+  if (parse_uri(request, host, port, path_and_query) == -1) {
+    clienterror(fd, method, "400", "Bad Request", "Cannot parse request.");
+
+    return;
+  }
   printf("host: %s, port: %s, path_and_query: %s\n\n", host, port, path_and_query);
 
   clientfd = Open_clientfd(host, port);
@@ -172,6 +176,10 @@ int send_request_to_server(int fd, char* method, char* path_and_query, char* htt
   printf("buf: %s", buf);
   Rio_writen(fd, buf, strlen(buf));
 
+  sprintf(buf, "Host: %s\r\n", host);
+  printf("buf: %s", buf);
+  Rio_writen(fd, buf, strlen(buf));
+
   sprintf(buf, "Connection: close\r\n");
   printf("buf: %s", buf);
   Rio_writen(fd, buf, strlen(buf));
@@ -182,7 +190,11 @@ int send_request_to_server(int fd, char* method, char* path_and_query, char* htt
 
   while (1) {
     Rio_readlineb(rp, buf, MAXLINE);
-    if (strncmp(buf, "Proxy-Connection", 16) == 0 || strncmp(buf, "User-Agent", 10) == 0) {
+    if (strncmp(buf, "Proxy-Connection", 16) == 0 || 
+        strncmp(buf, "User-Agent", 10) == 0 || 
+        strncmp(buf, "Connection", 10) == 0 ||
+        strncmp(buf, "Host", 4) == 0
+      ) {
       continue;
     }
     if (strcmp(buf, "\r\n") == 0) {
