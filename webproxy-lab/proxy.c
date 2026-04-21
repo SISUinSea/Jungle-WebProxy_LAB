@@ -11,7 +11,7 @@ static const char *user_agent_hdr =
     "Firefox/10.0.3\r\n";
 
 
-void doit(int fd);
+void *doit(void* fd);
 void read_requesthdrs(rio_t *rp);
 
 int parse_uri(char* request, char* host, char* port, char *path_and_query);
@@ -25,7 +25,8 @@ void clienterror(int fd, char *cause, char *errnum, char *shortmsg,
 
 int main(int argc, char **argv)
 {
-  int listenfd, connfd;
+  int listenfd, *connfdp;
+  pthread_t tid;
   char hostname[MAXLINE], port[MAXLINE];
   socklen_t clientlen;
   struct sockaddr_storage clientaddr;
@@ -41,27 +42,31 @@ int main(int argc, char **argv)
   while (1)
   {
     clientlen = sizeof(clientaddr);
-    connfd = accept(listenfd, (SA *)&clientaddr, &clientlen); // line:netp:tiny:accept
+    connfdp = Malloc(sizeof(int));
+    *connfdp = accept(listenfd, (SA *)&clientaddr, &clientlen); // line:netp:tiny:accept
 
-    if (connfd < 0) {
+    if ((*connfdp) < 0) {
       printf("Accept fail\n");
       continue;
     }
 
     if(getnameinfo((SA *)&clientaddr, clientlen, hostname, MAXLINE, port, MAXLINE, 0) != 0) {
-      close(connfd);
+      close(*connfdp);
       printf("getnameinfo fail\n");
       continue;
     }
     printf("Accepted connection from (%s, %s)\n", hostname, port);
-    doit(connfd);  // line:netp:tiny:doit
-    close(connfd); // line:netp:tiny:close
+    Pthread_create(&tid, NULL, doit, connfdp);
   }
 }
 
 
-void doit(int fd)
+void *doit(void* vargp)
 {
+  int fd = *((int *) vargp);
+  Pthread_detach(pthread_self());
+  Free(vargp);
+
   int clientfd; 
   struct stat sbuf; /* 이건 아마 파일의 상태를 확인한 값을 넘겨받기 위한 거*/
   char buf[MAXLINE], method[MAXLINE], request[MAXLINE], version[MAXLINE];
@@ -82,32 +87,36 @@ void doit(int fd)
   strcpy(version, "HTTP/1.0");
   if (strcasecmp(method, "GET") != 0 && strcasecmp(method, "HEAD") != 0) {
     clienterror(fd, method, "501", "Not implemented", "Proxy does not implement this method");
-
-    return;
+    close(fd);
+    return NULL;
   }
   // read_requesthdrs(&rio);
   
   /* parse_uri로 uri를 넘겨주고 filename, cgiargs를 파싱하기. 결과는 static 여부를 반환*/
   if (parse_uri(request, host, port, path_and_query) == -1) {
     clienterror(fd, method, "400", "Bad Request", "Cannot parse request.");
+    close(fd);
 
-    return;
-  }
+    return NULL;
+    }
   printf("host: %s, port: %s, path_and_query: %s\n\n", host, port, path_and_query);
 
   clientfd = open_clientfd(host, port);
 
   if (clientfd < 0) {
     clienterror(fd, method, "500", "Server error", "Cannot connect with requested server.");
-    return;
+    close(fd);
+
+    return NULL;
   }
   
   /* 서버에 요청 보내기 */
   send_request_to_server(clientfd, method, path_and_query, version, host, port, &rio);
   send_response_to_client(fd, clientfd);
 
-  Close(clientfd);
-
+  close(clientfd);
+  close(fd);
+  return NULL;
 }
 
 // void read_requesthdrs(rio_t *rp) {
@@ -188,18 +197,18 @@ int send_request_to_server(int fd, char* method, char* path_and_query, char* htt
   int has_host_hdr = 0;
   sprintf(buf, "%s %s %s\r\n", method, path_and_query, http_version);
   printf("buf: %s", buf);
-  Rio_writen(fd, buf, strlen(buf));
+  rio_writen(fd, buf, strlen(buf));
 
   sprintf(buf, "Connection: close\r\n");
   printf("buf: %s", buf);
-  Rio_writen(fd, buf, strlen(buf));
+  rio_writen(fd, buf, strlen(buf));
 
   sprintf(buf, "Proxy-Connection: close\r\n");
   printf("buf: %s", buf);
-  Rio_writen(fd, buf, strlen(buf));
+  rio_writen(fd, buf, strlen(buf));
 
   while (1) {
-    Rio_readlineb(rp, buf, MAXLINE);
+    rio_readlineb(rp, buf, MAXLINE);
     if (strncmp(buf, "Proxy-Connection", 16) == 0 || 
         strncmp(buf, "User-Agent", 10) == 0 || 
         strncmp(buf, "Connection", 10) == 0 
@@ -213,17 +222,17 @@ int send_request_to_server(int fd, char* method, char* path_and_query, char* htt
       break;
     }
     printf("buf: %s", buf);
-    Rio_writen(fd, buf, strlen(buf));
+    rio_writen(fd, buf, strlen(buf));
   }
 
   if (has_host_hdr == 0) {
     sprintf(buf, "Host: %s:%s\r\n", host, port);
     printf("buf: %s", buf);
-    Rio_writen(fd, buf, strlen(buf));
+    rio_writen(fd, buf, strlen(buf));
   }
   
   sprintf(buf, "%s\r\n", user_agent_hdr);
-  Rio_writen(fd, buf, strlen(buf));
+  rio_writen(fd, buf, strlen(buf));
   printf("buf: %s", buf);
 
   return 0;
@@ -244,7 +253,7 @@ int send_response_to_client(int fd, int clientfd){
       break;
     }
     rio_writen(fd, buf, readn);
-    printf("%s", buf);
+    // printf("%s", buf); << binary도 그냥 문자열처럼 읽으려고 시도, \0이 없으면 끝까지 읽어서 UB 가능성 있음.
   }
   
   return 0;
