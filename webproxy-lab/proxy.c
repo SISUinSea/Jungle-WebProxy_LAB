@@ -147,13 +147,17 @@ int parse_uri(char *request, char *host, char *port, char* path_and_query) {
     strcpy(host, ptr);
   } else if (colon == NULL && slash != NULL) { /* domain + /uri */
     strncpy(host, ptr, slash - ptr);
+    host[slash - ptr] = '\0';
     strcpy(path_and_query, slash);
   } else if (colon != NULL && slash == NULL) { /* domain:1234 */
     strncpy(host, ptr, colon - ptr);
+    host[colon - ptr] = '\0';
     strcpy(port, colon + 1);
   } else { /* domain:1234/uri */
     strncpy(host, ptr, colon - ptr);
+    host[colon - ptr] = '\0';
     strncpy(port, colon + 1, slash - (colon + 1));
+    port[slash - (colon + 1)] = '\0';
     strcpy(path_and_query, slash);
   }
 
