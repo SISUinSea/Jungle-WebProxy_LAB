@@ -7,7 +7,7 @@
             "request": "launch",
             "program": "${workspaceFolder}/webproxy-lab/tiny/tiny",
             "args": [
-                "8000"
+                "5001"
             ],
             "stopAtEntry": false,
             "cwd": "${workspaceFolder}/webproxy-lab/tiny",
@@ -58,7 +58,7 @@
             "request": "launch",
             "program": "${workspaceFolder}/webproxy-lab/proxy",
             "args": [
-                "4500"
+                "8000"
             ],
             "stopAtEntry": false,
             "cwd": "${workspaceFolder}/webproxy-lab",

@@ -15,8 +15,11 @@ void doit(int fd);
 void read_requesthdrs(rio_t *rp);
 
 int parse_uri(char* request, char* host, char* port, char *path_and_query);
-int send_request_to_server(int fd, char* method, char* path_and_query, char* http_version);
+int send_request_to_server(int fd, char* method, char* path_and_query, char* http_version, char* host, rio_t* rp);
 int send_response_to_client(int fd, int clientfd);
+void clienterror(int fd, char *cause, char *errnum, char *shortmsg,
+  char *longmsg);
+
 
 
 
@@ -68,12 +71,13 @@ void doit(int fd)
   printf("Request headers:\n");
   printf("%s", buf);
   sscanf(buf, "%s %s %s", method, request, version);
-  // if (strcasecmp(method, "GET") != 0 && strcasecmp(method, "HEAD") != 0) {
-  //   clienterror(fd, method, "501", "Not implemented", "Tiny does not implement this method");
+  strcpy(version, "HTTP/1.0");
+  if (strcasecmp(method, "GET") != 0 && strcasecmp(method, "HEAD") != 0) {
+    clienterror(fd, method, "501", "Not implemented", "Tiny does not implement this method");
 
-  //   return;
-  // }
-  read_requesthdrs(&rio);
+    return;
+  }
+  // read_requesthdrs(&rio);
   
   /* parse_uri로 uri를 넘겨주고 filename, cgiargs를 파싱하기. 결과는 static 여부를 반환*/
   parse_uri(request, host, port, path_and_query);
@@ -82,23 +86,26 @@ void doit(int fd)
   clientfd = Open_clientfd(host, port);
   
   /* 서버에 요청 보내기 */
-  send_request_to_server(clientfd, method, path_and_query, version);
+  send_request_to_server(clientfd, method, path_and_query, version, host, &rio);
   send_response_to_client(fd, clientfd);
+
+  Close(clientfd);
+
 }
 
-void read_requesthdrs(rio_t *rp) {
-  char buf[MAXLINE];
+// void read_requesthdrs(rio_t *rp) {
+//   char buf[MAXLINE];
 
   
-  while (1) {
-    Rio_readlineb(rp, buf, MAXLINE);
-    if (strcmp(buf, "\r\n") == 0) {
-      break;
-    }
-    printf("%s", buf);
-  }
-  return;
-}
+//   while (1) {
+//     Rio_readlineb(rp, buf, MAXLINE);
+//     if (strcmp(buf, "\r\n") == 0) {
+//       break;
+//     }
+//     printf("%s", buf);
+//   }
+//   return;
+// }
 
 
 /*
@@ -121,8 +128,8 @@ int parse_uri(char *request, char *host, char *port, char* path_and_query) {
       path_and_query-> "/filname.type?argument=1&argument2=2"(아무런 값도 주어지지 않은 경우에는 "/"이어야 함.)
   */
 
-  strcpy(path_and_query, "/");
-  strcpy(port, "80");
+  strcpy(path_and_query, "/\0");
+  strcpy(port, "80\0");
 
   /* http:// 가 없다면 fail */
   if (strncmp(ptr, "http://", 7) != 0) {
@@ -154,12 +161,32 @@ int parse_uri(char *request, char *host, char *port, char* path_and_query) {
 }
 
 
-int send_request_to_server(int fd, char* method, char* path_and_query, char* http_version)
+int send_request_to_server(int fd, char* method, char* path_and_query, char* http_version, char* host, rio_t* rp)
 {
   char buf[MAXLINE];
   sprintf(buf, "%s %s %s\r\n", method, path_and_query, http_version);
   printf("buf: %s", buf);
   Rio_writen(fd, buf, strlen(buf));
+
+  sprintf(buf, "Connection: close\r\n");
+  printf("buf: %s", buf);
+  Rio_writen(fd, buf, strlen(buf));
+
+  sprintf(buf, "Proxy-Connection: close\r\n");
+  printf("buf: %s", buf);
+  Rio_writen(fd, buf, strlen(buf));
+
+  while (1) {
+    Rio_readlineb(rp, buf, MAXLINE);
+    if (strncmp(buf, "Proxy-Connection", 16) == 0 || strncmp(buf, "User-Agent", 10) == 0) {
+      continue;
+    }
+    if (strcmp(buf, "\r\n") == 0) {
+      break;
+    }
+    printf("buf: %s", buf);
+    Rio_writen(fd, buf, strlen(buf));
+  }
   
   sprintf(buf, "%s\r\n\r\n", user_agent_hdr);
   Rio_writen(fd, buf, strlen(buf));
@@ -188,6 +215,30 @@ int send_response_to_client(int fd, int clientfd){
   }
   
   return 0;
+}
+
+
+
+void clienterror(int fd, char *cause, char *errnum, char *shortmsg, char *longmsg) {
+  char buf[MAXLINE], body[MAXBUF];
+
+  body[0] = '\0';
+
+  sprintf(body + strlen(body), "<html><title>Tiny Error</title>");
+  sprintf(body + strlen(body), "<body bgcolor=\"ffffff\">\r\n");
+  sprintf(body + strlen(body), "%s: %s\r\n", errnum, shortmsg);
+  sprintf(body + strlen(body), "<p>%s: %s\r\n", longmsg, cause);
+  sprintf(body + strlen(body), "<hr><em>The Tiny Web Server</em>\r\n");
+
+  /* Print the HTTP response */
+  sprintf(buf, "HTTP/1.0 %s %s\r\n", errnum, shortmsg);
+  Rio_writen(fd, buf, strlen(buf));
+  sprintf(buf, "Content-type: text/html\r\n");
+  Rio_writen(fd, buf, strlen(buf));
+  sprintf(buf, "Content-length: %d\r\n\r\n", (int)strlen(body));
+  Rio_writen(fd, buf, strlen(buf));
+
+  Rio_writen(fd, body, strlen(body));
 }
 
 
