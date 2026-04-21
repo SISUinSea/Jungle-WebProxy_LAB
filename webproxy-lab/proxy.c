@@ -41,9 +41,14 @@ int main(int argc, char **argv)
   while (1)
   {
     clientlen = sizeof(clientaddr);
-    connfd = Accept(listenfd, (SA *)&clientaddr,
-                    &clientlen); // line:netp:tiny:accept
-    Getnameinfo((SA *)&clientaddr, clientlen, hostname, MAXLINE, port, MAXLINE,
+    connfd = accept(listenfd, (SA *)&clientaddr, &clientlen); // line:netp:tiny:accept
+
+    if (connfd < 3) {
+      printf("Accept fail\n");
+      continue;
+    }
+
+    getnameinfo((SA *)&clientaddr, clientlen, hostname, MAXLINE, port, MAXLINE,
                 0);
     printf("Accepted connection from (%s, %s)\n", hostname, port);
     doit(connfd);  // line:netp:tiny:doit
@@ -87,7 +92,12 @@ void doit(int fd)
   }
   printf("host: %s, port: %s, path_and_query: %s\n\n", host, port, path_and_query);
 
-  clientfd = Open_clientfd(host, port);
+  clientfd = open_clientfd(host, port);
+
+  if (clientfd < 3) {
+    clienterror(fd, method, "500", "Server error", "Cannot connect with requested server.");
+    return;
+  }
   
   /* 서버에 요청 보내기 */
   send_request_to_server(clientfd, method, path_and_query, version, host, &rio);
@@ -172,11 +182,8 @@ int parse_uri(char *request, char *host, char *port, char* path_and_query) {
 int send_request_to_server(int fd, char* method, char* path_and_query, char* http_version, char* host, rio_t* rp)
 {
   char buf[MAXLINE];
+  int has_host_hdr = 0;
   sprintf(buf, "%s %s %s\r\n", method, path_and_query, http_version);
-  printf("buf: %s", buf);
-  Rio_writen(fd, buf, strlen(buf));
-
-  sprintf(buf, "Host: %s\r\n", host);
   printf("buf: %s", buf);
   Rio_writen(fd, buf, strlen(buf));
 
@@ -192,10 +199,12 @@ int send_request_to_server(int fd, char* method, char* path_and_query, char* htt
     Rio_readlineb(rp, buf, MAXLINE);
     if (strncmp(buf, "Proxy-Connection", 16) == 0 || 
         strncmp(buf, "User-Agent", 10) == 0 || 
-        strncmp(buf, "Connection", 10) == 0 ||
-        strncmp(buf, "Host", 4) == 0
+        strncmp(buf, "Connection", 10) == 0 
       ) {
       continue;
+    }
+    if (strncmp(buf, "Host", 4) == 0) {
+      has_host_hdr = 1;
     }
     if (strcmp(buf, "\r\n") == 0) {
       break;
@@ -203,10 +212,16 @@ int send_request_to_server(int fd, char* method, char* path_and_query, char* htt
     printf("buf: %s", buf);
     Rio_writen(fd, buf, strlen(buf));
   }
+
+  if (has_host_hdr == 0) {
+    sprintf(buf, "Host: %s\r\n", host);
+    printf("buf: %s", buf);
+    Rio_writen(fd, buf, strlen(buf));
+  }
   
-  sprintf(buf, "%s\r\n\r\n", user_agent_hdr);
+  sprintf(buf, "%s\r\n", user_agent_hdr);
   Rio_writen(fd, buf, strlen(buf));
-  printf("SEND TO SERVER: %s", buf);
+  printf("buf: %s", buf);
 
   return 0;
 }
@@ -222,12 +237,11 @@ int send_response_to_client(int fd, int clientfd){
   
   while (1) {
     readn = rio_readnb(&rio, buf, MAXLINE);
-    rio_writen(fd, buf, readn);
-    printf("%s", buf);
-    if (readn == 0){
+    if (readn <= 0) {
       break;
     }
-    
+    rio_writen(fd, buf, readn);
+    printf("%s", buf);
   }
   
   return 0;
